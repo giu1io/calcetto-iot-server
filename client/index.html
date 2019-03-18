@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Calcetto IOT</title>
+        <style>
+            .score {
+                font-size: 5em;
+            }
+            .red-team {
+                color: red;
+            }
+            .blue-team {
+                color: blue;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Calcetto IOT</h1>
+        <div class="score">
+            <span id="red-score" class="red-team"></span> - <span id="blue-score" class="blue-team"></span>
+        </div>
+        <script type="text/javascript">
+            (function() {
+                var redScore = document.getElementById("red-score");
+                var blueScore = document.getElementById("blue-score");
+
+                var conn = new WebSocket("ws://localhost:8080/ws");
+                conn.onclose = function(evt) {
+                    console.log("Connection Closed")
+                }
+                conn.onmessage = function(evt) {
+                    var score = JSON.parse(evt.data)
+                    redScore.textContent = score.red;
+                    blueScore.textContent = score.blue;
+                }
+            })();
+        </script>
+    </body>
+</html>
