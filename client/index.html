@@ -24,7 +24,7 @@
                 var redScore = document.getElementById("red-score");
                 var blueScore = document.getElementById("blue-score");
 
-                var conn = new WebSocket("ws://localhost:8080/ws");
+                var conn = new WebSocket("ws://" + window.location.hostname + ":8080/ws");
                 conn.onclose = function(evt) {
                     console.log("Connection Closed")
                 }

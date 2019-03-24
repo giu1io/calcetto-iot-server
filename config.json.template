@@ -1,0 +1,4 @@
+{
+    "serialDevice": "/dev/ttyp5",
+	"httpServerPort": "8080"
+}

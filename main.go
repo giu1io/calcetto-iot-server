@@ -1,15 +1,21 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
 
+	"github.com/spf13/viper"
 	"go.bug.st/serial.v1"
 )
 
 var (
 	scoreKeeper = ScoreKeeperBuilder()
+	port        serial.Port
+	portOpen    bool
 )
 
 /*
@@ -20,18 +26,24 @@ func readFromSerial(messages chan score) {
 	mode := &serial.Mode{
 		BaudRate: 115200,
 	}
-	port, err := serial.Open("/dev/ttyp7", mode)
+	var err error
+
+	port, err = serial.Open(viper.GetString("serialDevice"), mode)
 	if err != nil {
+		log.Println("Serial Error")
 		log.Fatal(err)
 	}
 
+	portOpen = true
+
 	buff := make([]byte, 100)
 
-	defer port.Close()
+	//defer port.Close()
 
 	for {
 		n, err := port.Read(buff)
-		if err != nil {
+		if err != nil && portOpen {
+			log.Println("Serial Error")
 			log.Fatal(err)
 			break
 		}
@@ -67,19 +79,53 @@ func startWebserver() {
 	http.HandleFunc("/ws", serveWs)
 
 	log.Println("Listening...")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":"+viper.GetString("httpServerPort"), nil); err != nil {
 		log.Fatal(err)
 	}
 }
 
+func initizeConfigurations() {
+	viper.SetDefault("serialDevice", "/dev/ttyp7")
+	viper.SetDefault("httpServerPort", "8080")
+	viper.SetConfigName("config")
+	viper.AddConfigPath("/etc/hookbot/")
+	viper.AddConfigPath(".")
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		panic(fmt.Errorf("Fatal error config file: %s \n", err))
+	}
+}
+
+func updateScore(messages chan score) {
+	for msg := range messages {
+		scoreKeeper.UpdateScore(msg)
+	}
+}
+
 func main() {
+	initizeConfigurations()
+
 	messages := make(chan score)
 
 	go startWebserver()
 	go readFromSerial(messages)
 
 	// for each new parsed message update the score
-	for msg := range messages {
-		scoreKeeper.UpdateScore(msg)
-	}
+	go updateScore(messages)
+
+	// handle interrupts
+	signalChan := make(chan os.Signal, 1)
+	cleanupDone := make(chan struct{})
+	signal.Notify(signalChan, os.Interrupt)
+	go func() {
+		<-signalChan
+		log.Println("Received an interrupt, stopping services...")
+		if port != nil && portOpen {
+			portOpen = false
+			port.Close()
+		}
+		close(cleanupDone)
+	}()
+	<-cleanupDone
 }
