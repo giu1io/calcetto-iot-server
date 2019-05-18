@@ -6,25 +6,34 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/viper"
 	"go.bug.st/serial.v1"
 )
 
+type parsedMessage struct {
+	Blue  int
+	Red   int
+	Reset bool
+}
+
 var (
-	scoreKeeper = ScoreKeeperBuilder()
-	port        serial.Port
-	portOpen    bool
+	scoreKeeper  = ScoreKeeperBuilder()
+	port         serial.Port
+	portOpen     bool
+	matchRed, _  = regexp.Compile("GOAL_RED_[0-9]{1,}")
+	matchBlue, _ = regexp.Compile("GOAL_BLUE_[0-9]{1,}")
 )
 
 /*
 	This function reads from a serial device and relays parsed messages to the channel given in input
 	Serial configurations will need to be tweaked accordingly and maybe read from a configuration file
 */
-func readFromSerial(messages chan score) {
+func readFromSerial(messages chan parsedMessage) {
 	mode := &serial.Mode{
-		BaudRate: 115200,
+		BaudRate: 9600,
 	}
 	var err error
 
@@ -58,15 +67,19 @@ func readFromSerial(messages chan score) {
 /*
 	Parse an input string and returns the corresponding score
 */
-func parseMessage(message string) score {
+func parseMessage(message string) parsedMessage {
 	message = strings.TrimRight(message, "\r\n")
-	s := score{Red: 0, Blue: 0}
-	if message == "GOAL_RED_1" {
+	s := parsedMessage{Red: 0, Blue: 0, Reset: false}
+	if matchRed.MatchString(message) {
 		s.Red++
 	}
-	if message == "GOAL_BLUE_1" {
+	if matchBlue.MatchString(message) {
 		s.Blue++
 	}
+	if message == "MATCH_START" {
+		s.Reset = true
+	}
+
 	return s
 }
 
@@ -84,7 +97,7 @@ func startWebserver() {
 	}
 }
 
-func initizeConfigurations() {
+func initializeConfigurations() {
 	viper.SetDefault("serialDevice", "/dev/ttyp7")
 	viper.SetDefault("httpServerPort", "8080")
 	viper.SetConfigName("config")
@@ -97,16 +110,20 @@ func initizeConfigurations() {
 	}
 }
 
-func updateScore(messages chan score) {
+func updateScore(messages chan parsedMessage) {
 	for msg := range messages {
-		scoreKeeper.UpdateScore(msg)
+		if msg.Reset {
+			scoreKeeper.ResetScore()
+		} else {
+			scoreKeeper.UpdateScore(score{Red: msg.Red, Blue: msg.Blue})
+		}
 	}
 }
 
 func main() {
-	initizeConfigurations()
+	initializeConfigurations()
 
-	messages := make(chan score)
+	messages := make(chan parsedMessage)
 
 	go startWebserver()
 	go readFromSerial(messages)
