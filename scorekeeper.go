@@ -3,29 +3,55 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
-type score struct {
+// ScoreUpdate response sent back
+type ScoreUpdate struct {
+	CurrentScore Score     `json:"currentScore"`
+	LastScore    LastScore `json:"lastScore"`
+}
+
+// Score keep track of the scores
+type Score struct {
 	Blue int `json:"blue"`
 	Red  int `json:"red"`
 }
 
+// LastScore keeps track of the last game score
+type LastScore struct {
+	Score       Score     `json:"score"`
+	Timestamp   time.Time `json:"timestamp"`
+	Displayable bool      `json:"displayable"`
+}
+
+// ScoreKeeper contains score keeping logic
 type ScoreKeeper struct {
 	Blue        int `json:"blue"`
 	Red         int `json:"red"`
-	subscribers []chan score
+	subscribers []chan ScoreUpdate
 	mutex       sync.Mutex
+	lastScore   LastScore
 }
 
+// ResetScore resets the score
 func (currentScore *ScoreKeeper) ResetScore() {
 	currentScore.Red = 0
 	currentScore.Blue = 0
 	go currentScore.broadcast()
 }
 
-func (currentScore *ScoreKeeper) UpdateScore(addScore score) {
+// UpdateScore increments the current score
+func (currentScore *ScoreKeeper) UpdateScore(addScore Score) {
 	currentScore.Red += addScore.Red
 	currentScore.Blue += addScore.Blue
+
+	if currentScore.Red >= 10 || currentScore.Blue >= 10 {
+		currentScore.lastScore = LastScore{Score{currentScore.Blue, currentScore.Red}, time.Now(), true}
+		currentScore.Red = 0
+		currentScore.Blue = 0
+	}
+
 	go currentScore.broadcast()
 }
 
@@ -34,33 +60,31 @@ func (currentScore *ScoreKeeper) UpdateScore(addScore score) {
 */
 func (currentScore *ScoreKeeper) broadcast() {
 	for _, subscriber := range currentScore.subscribers {
-		subscriber <- score{Red: currentScore.Red, Blue: currentScore.Blue}
+		score := Score{Red: currentScore.Red, Blue: currentScore.Blue}
+		subscriber <- ScoreUpdate{CurrentScore: score, LastScore: currentScore.lastScore}
 	}
 }
 
-/*
-	Create new channel, add to subscriber list synchronously and then send current score to the channel (async)
-*/
-func (currentScore *ScoreKeeper) Subscribe() chan score {
-	c := make(chan score)
+// Subscribe Create new channel, add to subscriber list synchronously and then send current score to the channel (async)
+func (currentScore *ScoreKeeper) Subscribe() chan ScoreUpdate {
+	c := make(chan ScoreUpdate)
 	currentScore.mutex.Lock()
 	currentScore.subscribers = append(currentScore.subscribers, c)
 	currentScore.mutex.Unlock()
 
 	go func() {
-		c <- score{Red: currentScore.Red, Blue: currentScore.Blue}
+		score := Score{Red: currentScore.Red, Blue: currentScore.Blue}
+		c <- ScoreUpdate{CurrentScore: score, LastScore: currentScore.lastScore}
 	}()
 
 	return c
 }
 
-/*
-	Search the channel c between the subscribers synchronously, close it and remove it
-*/
-func (currentScore *ScoreKeeper) Unsubscribe(c chan score) {
+// Unsubscribe Search the channel c between the subscribers synchronously, close it and remove it
+func (currentScore *ScoreKeeper) Unsubscribe(c chan ScoreUpdate) {
 	go func() {
 		var foundIndex int
-		var found bool = false
+		var found = false
 
 		currentScore.mutex.Lock()
 		for index, subscriber := range currentScore.subscribers {
@@ -80,9 +104,7 @@ func (currentScore *ScoreKeeper) Unsubscribe(c chan score) {
 	}()
 }
 
-/*
-	Scorekeeper "class" constructor
-*/
+// ScoreKeeperBuilder Scorekeeper "class" constructor
 func ScoreKeeperBuilder() ScoreKeeper {
-	return ScoreKeeper{0, 0, []chan score{}, sync.Mutex{}}
+	return ScoreKeeper{0, 0, []chan ScoreUpdate{}, sync.Mutex{}, LastScore{}}
 }

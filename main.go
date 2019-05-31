@@ -115,7 +115,7 @@ func updateScore(messages chan parsedMessage) {
 		if msg.Reset {
 			scoreKeeper.ResetScore()
 		} else {
-			scoreKeeper.UpdateScore(score{Red: msg.Red, Blue: msg.Blue})
+			scoreKeeper.UpdateScore(Score{Red: msg.Red, Blue: msg.Blue})
 		}
 	}
 }
