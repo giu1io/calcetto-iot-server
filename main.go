@@ -76,7 +76,7 @@ func parseMessage(message string) parsedMessage {
 	if matchBlue.MatchString(message) {
 		s.Blue++
 	}
-	if message == "MATCH_START" {
+	if message == "MATCH_START\r\nStart Game" {
 		s.Reset = true
 	}
 
