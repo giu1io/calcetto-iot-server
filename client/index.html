@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Calcetto IOT</title>
+        <style>
+            .score {
+                font-size: 7em;
+            }
+            .red-team {
+                color: red;
+            }
+            .blue-team {
+                color: blue;
+            }
+            .last-score {
+                font-size: 4em;
+            }
+            .last-score.hidden {
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Calcetto IOT</h1>
+        <div class="score">
+            <span id="red-score" class="red-team"></span> - <span id="blue-score" class="blue-team"></span>
+        </div>
+        <div id="last-score" class="last-score hidden">
+            Last Match: <span id="last-red-score" class="red-team"></span> - <span id="last-blue-score" class="blue-team"></span><br/>
+            At: <span id="last-score-date"></span>
+        </div>
+        <script type="text/javascript">
+            (function() {
+                var redScore = document.getElementById("red-score");
+                var blueScore = document.getElementById("blue-score");
+                var lastScore = document.getElementById("last-score");
+                var lastRedScore = document.getElementById("last-red-score");
+                var lastBlueScore = document.getElementById("last-blue-score");
+                var lastScoreDate = document.getElementById("last-score-date");
+
+                var isConnectionActive = false;
+
+                function connectToServer() {
+                    var conn = new WebSocket("ws://" + window.location.hostname + ":8080/ws");
+                    conn.onclose = function(evt) {
+                        console.log("Connection Closed")
+                        isConnectionActive = false;
+                    }
+                    conn.onmessage = function(evt) {
+                        var score = JSON.parse(evt.data)
+                        redScore.textContent = score.currentScore.red;
+                        blueScore.textContent = score.currentScore.blue;
+
+                        if(score.lastScore.displayable) {
+                            lastRedScore.textContent = score.lastScore.score.red;
+                            lastBlueScore.textContent = score.lastScore.score.blue;
+
+                            var timestamp = new Date(score.lastScore.timestamp);
+                            lastScoreDate.textContent = 
+                                timestamp.getHours() + ':' + 
+                                (timestamp.getMinutes() <= 9 ? '0' : '') + timestamp.getMinutes() + ' ' +
+                                timestamp.getDate() + '/' + (timestamp.getMonth()+1);
+
+                            lastScore.classList.remove('hidden');
+                        }
+                        else {
+                            lastScore.classList.add('hidden');
+                        }
+                    }
+                    conn.onopen = function(evt) {
+                        isConnectionActive = true;
+                    }                 
+                }
+
+                window.setInterval(function() {
+                    if(isConnectionActive === false) {
+                        connectToServer();
+                    }
+                }, 5000);
+
+                connectToServer();
+            })();
+        </script>
+    </body>
+</html>
